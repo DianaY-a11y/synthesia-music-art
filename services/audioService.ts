@@ -72,8 +72,8 @@ export class AudioEngine {
   }
 
   // New: Accepts RGB to modulate sound character
-  public triggerGrain(yPosition: number, intensity: number, r: number, g: number, b: number) {
-    if (!this.ctx || !this.params || !this.masterGain || this.scaleNotes.length === 0) return;
+  public triggerGrain(yPosition: number, intensity: number, r: number, g: number, b: number): number | null {
+    if (!this.ctx || !this.params || !this.masterGain || this.scaleNotes.length === 0) return null;
 
     // 1. PITCH LOGIC
     const noteIndex = Math.floor(yPosition * (this.scaleNotes.length - 1));
@@ -113,7 +113,9 @@ export class AudioEngine {
         const osc1 = this.ctx.createOscillator();
         const osc2 = this.ctx.createOscillator();
         const env = this.ctx.createGain();
-        const filter = this.ctx.createBiquadFilter();
+        const mainFilter = this.ctx.createBiquadFilter();
+        const bodyFilter = this.ctx.createBiquadFilter(); // New: Simulates violin body resonance
+        const noise = this.ctx.createBufferSource(); // New: For bow attack "bite"
 
         osc1.type = 'sawtooth';
         osc2.type = 'sawtooth';
@@ -129,29 +131,52 @@ export class AudioEngine {
         // Instead of a static filter, we move the filter cutoff.
         // As the note gets louder, the filter opens (brighter).
         // As the note fades, the filter closes (darker).
-        filter.type = 'lowpass';
-        filter.Q.value = 1.0; // Resonance
+        mainFilter.type = 'lowpass';
+        mainFilter.Q.value = 1.0; // Resonance
         
         // Start Muffled -> Swell to Bright -> Fade to Muffled
-        filter.frequency.setValueAtTime(600, now); 
-        filter.frequency.linearRampToValueAtTime(3000, now + attack); 
-        filter.frequency.exponentialRampToValueAtTime(600, now + attack + release);
+        mainFilter.frequency.setValueAtTime(600, now); 
+        mainFilter.frequency.linearRampToValueAtTime(3000, now + attack); 
+        mainFilter.frequency.exponentialRampToValueAtTime(600, now + attack + release);
+
+        // New: Body Resonance Filter
+        bodyFilter.type = 'peaking';
+        bodyFilter.frequency.value = 1200; // Resonant peak around 1.2kHz
+        bodyFilter.Q.value = 2.0; // Sharpness of the peak
+        bodyFilter.gain.value = 6; // Boost in dB
+
+        // New: Bow Attack Noise
+        const noiseBufferSize = this.ctx.sampleRate * 0.1;
+        const buffer = this.ctx.createBuffer(1, noiseBufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < noiseBufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        noise.buffer = buffer;
+        const noiseEnv = this.ctx.createGain();
+        noise.connect(noiseEnv);
+        noiseEnv.gain.setValueAtTime(0, now);
+        noiseEnv.gain.linearRampToValueAtTime(0.3 * Math.min(intensity, 1.0), now + 0.01); // Quick scratch
+        noiseEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.1); // Fast decay
 
         // Vibrato
         const vibrato = this.ctx.createOscillator();
         vibrato.frequency.value = 5.0; // Slower, more emotional vibrato 
         const vibGain = this.ctx.createGain();
-        vibGain.gain.value = 8;
+        vibGain.gain.value = 8; // Vibrato depth in cents (8/100ths of a semitone)
         vibrato.connect(vibGain);
-        vibGain.connect(osc1.frequency);
-        vibGain.connect(osc2.frequency);
+        // FIX: Connect vibrato to the DETUNE property, not the frequency
+        vibGain.connect(osc1.detune);
+        vibGain.connect(osc2.detune);
         vibrato.start(now);
         vibrato.stop(now + attack + release);
 
         // Connections
-        osc1.connect(filter);
-        osc2.connect(filter);
-        filter.connect(env);
+        osc1.connect(mainFilter);
+        osc2.connect(mainFilter);
+        mainFilter.connect(bodyFilter); // Pass sound through the body filter
+        bodyFilter.connect(env);
+        noiseEnv.connect(env); // Mix the bow attack noise into the main envelope
         env.connect(this.masterGain);
 
         // Envelope
@@ -167,8 +192,10 @@ export class AudioEngine {
         osc2.start(now);
         osc1.stop(now + attack + release);
         osc2.stop(now + attack + release);
-        
-        return; // Exit early since we handled the graph manually
+        noise.start(now);
+        noise.stop(now + 0.2);
+
+        return note; // Return the played MIDI note
     }
 
     // STANDARD INSTRUMENTS
@@ -177,6 +204,93 @@ export class AudioEngine {
     let filter: BiquadFilterNode | null = null;
 
     switch (this.params.instrument) {
+      case 'flute': {
+        note += 12; // Raise an octave to a typical flute range
+        if (note < 60) note = 60; // Clamp to C4
+
+        const osc = this.ctx.createOscillator();
+        const env = this.ctx.createGain();
+        const noise = this.ctx.createBufferSource();
+        const noiseEnv = this.ctx.createGain();
+
+        // --- Tone part ---
+        osc.type = 'sine';
+        osc.frequency.value = mtof(note);
+        attack = 0.1;
+        release = 1.5;
+
+        // Gentle Vibrato
+        const vibrato = this.ctx.createOscillator();
+        vibrato.frequency.value = 7.0; // Faster, shallower vibrato than violin
+        const vibGain = this.ctx.createGain();
+        vibGain.gain.value = 4; // Vibrato depth in cents
+        vibrato.connect(vibGain);
+        vibGain.connect(osc.detune); // Use detune for subtle pitch modulation
+        vibrato.start(now);
+        vibrato.stop(now + attack + release);
+
+        // --- Breath part (chiff) ---
+        const noiseBufferSize = this.ctx.sampleRate * 0.5;
+        const buffer = this.ctx.createBuffer(1, noiseBufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < noiseBufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        noise.buffer = buffer;
+        noise.loop = true;
+
+        // Connections
+        osc.connect(env);
+        noise.connect(noiseEnv);
+        noiseEnv.connect(env); // Mix breath into main envelope
+        env.connect(this.masterGain);
+
+        // Envelopes
+        const velocity = Math.min(intensity, 1.0) * 0.5;
+        env.gain.setValueAtTime(0, now);
+        env.gain.linearRampToValueAtTime(velocity, now + attack);
+        env.gain.exponentialRampToValueAtTime(0.001, now + attack + release);
+
+        // Breath envelope is very short
+        noiseEnv.gain.setValueAtTime(0, now);
+        noiseEnv.gain.linearRampToValueAtTime(velocity * 0.4, now + 0.02); // Short puff
+        noiseEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+        osc.start(now);
+        noise.start(now);
+        osc.stop(now + attack + release);
+        noise.stop(now + 0.5); 
+        return note;
+      }
+
+      case 'organ': {
+        attack = 0.02;
+        release = 0.2;
+        const freq = mtof(note);
+        const velocity = Math.min(intensity, 1.0) * 0.2; // Lower gain per osc
+
+        // Additive synthesis: sum of sine waves at harmonic intervals
+        const harmonics = [0.5, 1, 2, 3, 4]; // Sub-octave, fundamental, and higher harmonics
+        const harmonicGains = [0.5, 1, 0.6, 0.4, 0.2];
+
+        harmonics.forEach((h, i) => {
+          const osc = this.ctx.createOscillator();
+          const env = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq * h;
+          osc.connect(env);
+          env.connect(this.masterGain);
+
+          env.gain.setValueAtTime(0, now);
+          env.gain.linearRampToValueAtTime(velocity * harmonicGains[i], now + attack);
+          env.gain.linearRampToValueAtTime(0, now + attack + release);
+
+          osc.start(now);
+          osc.stop(now + attack + release);
+        });
+        return note;
+      }
+
       case 'pluck':
         attack = 0.01;
         release = 0.3; 
@@ -207,7 +321,7 @@ export class AudioEngine {
         attack = 0.001;
         release = 0.1; 
         baseRoughness = 0; 
-        break;
+        return note;
       case 'synth':
       default:
         attack = 0.05;
@@ -238,6 +352,8 @@ export class AudioEngine {
 
     osc.start(now);
     osc.stop(now + attack + release);
+
+    return note;
   }
 
   public stop() {

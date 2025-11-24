@@ -21,7 +21,7 @@ export interface AudioParams {
   roughness: number; // 0-1 (clean to distorted)
   density: number; // 0-1 (sparse to dense notes)
   reverb: number; // 0-1 (dry to wet)
-  instrument: 'synth' | 'pad' | 'pluck' | 'drone' | 'chime' | 'bass' | '8-bit' | 'violin';
+  instrument: 'synth' | 'pad' | 'pluck' | 'drone' | 'chime' | 'bass' | '8-bit' | 'violin' | 'flute' | 'organ';
 }
 
 export interface AnalysisResult {
