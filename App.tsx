@@ -410,7 +410,6 @@ function App() {
         <header className="flex justify-between items-center pointer-events-auto">
           <div>
             <h1 className="text-3xl font-serif tracking-wider drop-shadow-lg">SYNESTHESIA</h1>
-            <p className="text-xs text-gray-300 uppercase tracking-[0.2em] drop-shadow-md">Scan-Line Synthesis</p>
           </div>
           {imageSrc && (
             <div className="flex gap-4 items-center">

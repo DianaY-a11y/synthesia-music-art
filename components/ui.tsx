@@ -105,7 +105,6 @@ export const FileUpload: React.FC<{ onFileSelect: (file: File) => void }> = ({ o
         accept="image/*"
         onChange={handleChange}
       />
-      <div className="text-gray-400 mb-2 text-4xl">🖼️</div>
       <h3 className="text-xl font-bold text-white mb-2">Upload Artwork</h3>
       <p className="text-sm text-gray-500">Drag & drop or click to browse</p>
     </div>
