@@ -1,20 +1,22 @@
-<div align="center">
-</div>
+# synesthesia
 
-# Run and deploy your AI Studio app
+turn an artwork into a 3d field of grains and a calm, generative soundtrack.
 
-This contains everything you need to run your app locally.
+- upload an image: the landing bloom (a blue gaussian-splat poppy, drawn as a character grid) "creates" the piece
+- the image becomes a grain landscape; a scan line plays it left to right
+- brightness and position become notes; long dark stretches are trimmed or glided through
+- two moods: **meditation** (bowls, drone, sub, no percussion) and **focus** (soft keys, warm pad, bass, a quiet pulse)
+- everything runs in the browser: no ai, no api keys, no network calls
 
-View your app in AI Studio: https://ai.studio/apps/temp/1
+the whole app is the single `index.html` (vanilla javascript, webgl2 shaders, web audio).
 
-## Run Locally
+## run locally
 
-**Prerequisites:**  Node.js
+```
+npm install
+npm run dev
+```
 
+## deploy
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
-# synthesia-music-art
+vercel builds it with `vite build` and serves `dist/`.
